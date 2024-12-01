@@ -1,0 +1,15 @@
+version: "3.9"
+services:
+  fastapi:
+    build: .
+    container_name: fastapi_app
+    ports:
+      - "8000:8000"
+    develop:
+          watch:
+            - action: sync+restart
+              path: ./app
+              target: /app/app
+  
+    environment:
+      - PYTHONUNBUFFERED=1
