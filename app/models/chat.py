@@ -5,3 +5,7 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     response: str
+
+class PredictResponse(BaseModel):
+    intent: str  # Predicted intent
+    confidence: float
