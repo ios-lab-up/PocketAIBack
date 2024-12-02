@@ -2,7 +2,8 @@ import logging
 from fastapi import APIRouter, HTTPException, Response
 from fastapi.responses import JSONResponse
 from app.models.chat import ChatRequest, ChatResponse, PredictResponse
-from app.utils.preprocess import clean_text
+from app.agents.base import StudentAgent
+from app.utils.process_message import process_user_message
 import time
 import joblib
 import requests
@@ -21,8 +22,9 @@ except Exception as e:
     logger.error(f"Error loading model artifacts: {e}")
     raise e
 
-
+student_agent = StudentAgent()
 router = APIRouter()
+
 @router.get("/health")
 def healthcheck(response: Response):
     """
@@ -50,35 +52,35 @@ def healthcheck(response: Response):
         "version": version
     }
 
-
 @router.post("/chat", response_model=ChatResponse)
 async def chat_endpoint(request: ChatRequest):
+    """
+    Process a user query and respond using LangChain tools and logic.
+    """
     logger.info(f"Received message: {request.message}")
-    # For demonstration, echo the message back as the response
-    return ChatResponse(response=f"Echo: {request.message}")
+    return process_user_message(student_agent, request.message)
+# @router.post("/predict", response_model=PredictResponse)
+# async def predict_intent(request: ChatRequest):
+#     """
+#     Predict the intent of a given query.
+#     """
+#     try:
+#         # Preprocess the user's query
+#         clean_query = clean_text(request.message)
 
-@router.post("/predict", response_model=PredictResponse)
-async def predict_intent(request: ChatRequest):
-    """
-    Predict the intent of a given query.
-    """
-    try:
-        # Preprocess the user's query
-        clean_query = clean_text(request.message)
+#         # Vectorize the query
+#         query_vectorized = vectorizer.transform([clean_query])
 
-        # Vectorize the query
-        query_vectorized = vectorizer.transform([clean_query])
+#         # Predict the intent
+#         predicted_label = classifier.predict(query_vectorized)[0]
+#         predicted_intent = label_encoder.inverse_transform([predicted_label])[0]
 
-        # Predict the intent
-        predicted_label = classifier.predict(query_vectorized)[0]
-        predicted_intent = label_encoder.inverse_transform([predicted_label])[0]
+#         # Get confidence score
+#         probabilities = classifier.predict_proba(query_vectorized)[0]
+#         confidence = max(probabilities)
 
-        # Get confidence score
-        probabilities = classifier.predict_proba(query_vectorized)[0]
-        confidence = max(probabilities)
-
-        logger.info(f"Predicted intent: {predicted_intent} with confidence: {confidence}")
-        return PredictResponse(intent=predicted_intent, confidence=confidence)
-    except Exception as e:
-        logger.error(f"Error predicting intent: {e}")
-        raise HTTPException(status_code=500, detail="Failed to predict intent.")
+#         logger.info(f"Predicted intent: {predicted_intent} with confidence: {confidence}")
+#         return PredictResponse(intent=predicted_intent, confidence=confidence)
+#     except Exception as e:
+#         logger.error(f"Error predicting intent: {e}")
+#         raise HTTPException(status_code=500, detail="Failed to predict intent.")
