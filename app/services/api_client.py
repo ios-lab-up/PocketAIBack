@@ -78,7 +78,7 @@ async def predict_intent(request: ChatRequest):
         confidence = max(probabilities)
 
         logger.info(f"Predicted intent: {predicted_intent} with confidence: {confidence}")
-        return ChatResponse(intent=predicted_intent, confidence=confidence)
+        return PredictResponse(intent=predicted_intent, confidence=confidence)
     except Exception as e:
         logger.error(f"Error predicting intent: {e}")
         raise HTTPException(status_code=500, detail="Failed to predict intent.")
