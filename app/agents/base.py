@@ -1,4 +1,4 @@
-from langchain.chat_models import ChatOpenAI
+from langchain_openai import ChatOpenAI
 from langchain.agents import initialize_agent, AgentType
 from app.services.student_data import StudentDataAPI
 from app.utils.preprocess import clean_text
