@@ -1,19 +1,32 @@
 from langchain_openai import ChatOpenAI
-from langchain.agents import initialize_agent, AgentType
-from app.services.student_data import StudentDataAPI
+from langchain.agents import create_react_agent, Tool
+from langchain.prompts import PromptTemplate
 from app.utils.preprocess import clean_text
+from langchain_core.output_parsers import JsonOutputParser
+
 import joblib
+import requests
 import logging
+import json
+from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
+class AgentResponse(BaseModel):
+    action: str = Field(description="El nombre de la acción a realizar.")
+    response: str = Field(description="La respuesta que se devolverá al usuario.")
 
 class StudentAgent:
+    """
+    Agent for student queries that integrates intent classification,
+    data retrieval, and response generation using LangChain.
+    """
 
     def __init__(self, vectorizer_path="app/models/vectorizer.pkl",
                  classifier_path="app/models/intent_classifier.pkl",
                  label_encoder_path="app/models/label_encoder.pkl",
-                 llm_model="gpt-3.5-turbo"):
+                 llm_model="gpt-3.5-turbo",
+                 base_url=None, timeout=10):
         """
         Initialize the StudentAgent, including models and LangChain agent setup.
 
@@ -22,8 +35,13 @@ class StudentAgent:
             classifier_path (str): Path to the classifier pickle file.
             label_encoder_path (str): Path to the label encoder pickle file.
             llm_model (str): Language model to use (default: "gpt-3.5-turbo").
+            base_url (str): Base URL for the student data API.
+            timeout (int): Timeout for the student data API requests.
         """
         self.llm_model = llm_model
+        self.base_url = base_url
+        self.timeout = timeout
+        self.parser = JsonOutputParser(pydantic_object=AgentResponse)
 
         # Load intent classification models
         self._load_models(vectorizer_path, classifier_path, label_encoder_path)
@@ -32,9 +50,6 @@ class StudentAgent:
         self.agent = self._initialize_agent()
 
     def _load_models(self, vectorizer_path, classifier_path, label_encoder_path):
-        """
-        Load the intent classification models.
-        """
         try:
             self.vectorizer = joblib.load(vectorizer_path)
             self.classifier = joblib.load(classifier_path)
@@ -44,46 +59,85 @@ class StudentAgent:
             logger.error(f"Error loading model artifacts: {e}")
             raise RuntimeError("Failed to load intent classification models.")
 
+    def fetch_student_data(self, action: str, user_id: str, term: str = None) -> dict:
+        try:
+            params = {"action": action, "user_id": user_id}
+            if term:
+                params["term"] = term
+
+            response = requests.get(
+                f"{self.base_url}/student-data",
+                params=params,
+                timeout=self.timeout,
+            )
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException as e:
+            logger.error(f"Failed to fetch student data: {e}")
+            return {"error": f"Failed to fetch student data: {str(e)}"}
     def _initialize_agent(self):
         """
         Initialize the LangChain agent with tools.
-
-        Returns:
-            agent: The initialized LangChain agent.
         """
         try:
-            # Initialize StudentDataAPI
-            student_api = StudentDataAPI()
+            tools = self._define_tools()
+            logger.info(f"Tools successfully defined: {tools}")
 
-            # Define LangChain tools
-            tools = student_api.define_tools()
-
-            # Initialize the LLM
             llm = ChatOpenAI(temperature=0.7, model=self.llm_model)
+            logger.info(f"LLM initialized with model: {self.llm_model}")
 
-            # Initialize the LangChain agent
-            agent = initialize_agent(
-                tools=tools,
+            # Generar los nombres de las herramientas
+            tool_names = ", ".join([tool.name for tool in tools])
+
+            format_instructions = self.parser.get_format_instructions()
+
+            # Crear el prompt con las variables requeridas
+            prompt = PromptTemplate(
+                input_variables=["input", "tools", "tool_names", "agent_scratchpad"],
+                template=(
+                    "Eres un asistente útil que siempre responde en JSON. Responde a la siguiente entrada en este formato estricto:\n"
+                    f"{format_instructions}\n\n"
+                    "Herramientas disponibles:\n"
+                    "{tools}\n\n"
+                    "Nombres de herramientas:\n"
+                    "{tool_names}\n\n"
+                    "Acciones realizadas hasta ahora:\n"
+                    "{agent_scratchpad}\n\n"
+                    "Entrada del usuario:\n"
+                    "{input}\n"
+                ),
+            )
+
+            # Inicializar el agente con el prompt y las herramientas
+            agent = create_react_agent(
                 llm=llm,
-                agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
-                verbose=True,
+                tools=tools,
+                prompt=prompt,
             )
             logger.info("LangChain agent initialized successfully.")
             return agent
         except Exception as e:
-            logger.error(f"Error initializing LangChain agent: {e}")
+            logger.error(f"Error initializing LangChain agent: {e}", exc_info=True)
             raise RuntimeError("Failed to initialize LangChain agent.")
 
+
+    def _define_tools(self) -> list:
+        def fetch_data(inputs: dict) -> str:
+            action = inputs.get("action")
+            user_id = inputs.get("user_id")
+            term = inputs.get("term", None)
+            result = self.fetch_student_data(action=action, user_id=user_id, term=term)
+            return str(result)
+
+        return [
+            Tool(
+                name="FetchStudentData",
+                func=fetch_data,
+                description="Obtiene datos específicos de estudiantes basados en la acción, ID de usuario y término.",
+            )
+        ]
+
     def classify_intent(self, message: str):
-        """
-        Classify the intent of a message using the intent classifier.
-
-        Args:
-            message (str): The user query.
-
-        Returns:
-            tuple: (predicted_intent, confidence)
-        """
         try:
             clean_query = clean_text(message)
             query_vectorized = self.vectorizer.transform([clean_query])
@@ -98,21 +152,22 @@ class StudentAgent:
             logger.error(f"Error classifying intent: {e}")
             raise RuntimeError("Failed to classify intent.")
 
-    def process_with_agent(self, message: str):
-        """
-        Process a message with the LangChain agent.
-
-        Args:
-            message (str): The user query.
-
-        Returns:
-            str: The agent's response.
-        """
+    def process_with_agent(self, inputs: dict):
         try:
-            response = self.agent.run(message)
-            logger.info(f"Agent response: {response}")
-            return response
+            formatted_input = inputs.get("input", "")
+            logger.info(f"Formatted input for LangChain agent: {formatted_input}")
+
+            raw_response = self.agent.invoke({"input": formatted_input})
+            logger.info(f"Raw agent response: {raw_response}")
+
+            try:
+                json_output = json.loads(raw_response)
+                logger.info(f"Parsed JSON output: {json_output}")
+                return json_output
+            except json.JSONDecodeError:
+                logger.warning("LLM output is not a valid JSON, returning raw text.")
+                return raw_response
+
         except Exception as e:
             logger.error(f"Error processing query with LangChain agent: {e}")
-            # Graceful fallback
-            return "Lo siento, no pude procesar tu consulta en este momento. Por favor, intenta nuevamente."
+            return {"error": "Lo siento, no pude procesar tu consulta en este momento."}

@@ -1,12 +1,13 @@
 import logging
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, HTTPException, Response, Query
 from fastapi.responses import JSONResponse
 from app.models.chat import ChatRequest, ChatResponse, PredictResponse
 from app.agents.base import StudentAgent
-from app.utils.process_message import process_user_message
+from app.agents.intent_agent import IntentBasedAgent
 import time
 import joblib
 import requests
+
 
 
 # Configure logging
@@ -51,14 +52,30 @@ def healthcheck(response: Response):
         **public_ip,
         "version": version
     }
+@router.post("/chat")
+async def chat_endpoint(
+    request: ChatRequest,
+    user_id: str = Query(..., description="The user ID of the student"),
+    term: str = Query(None, description="Optional term parameter for context")
+):
+    """
+    Process a user query and respond using the IntentBasedAgent class,
+    with additional context such as user_id and term.
+    """
+    logger.info(f"Received message: {request.message}, User ID: {user_id}, Term: {term}")
 
-@router.post("/chat", response_model=ChatResponse)
-async def chat_endpoint(request: ChatRequest):
-    """
-    Process a user query and respond using LangChain tools and logic.
-    """
-    logger.info(f"Received message: {request.message}")
-    return process_user_message(student_agent, request.message)
+    try:
+        # Use the IntentBasedAgent class directly
+        response = IntentBasedAgent.handle_query(
+            user_query=request.message,
+            user_id=user_id,
+            term=term
+        )
+        return ChatResponse(response=response)
+    except Exception as e:
+        logger.error(f"Error processing chat request: {e}")
+        return ChatResponse(response="Lo siento, no pude procesar tu consulta en este momento.")
+
 # @router.post("/predict", response_model=PredictResponse)
 # async def predict_intent(request: ChatRequest):
 #     """

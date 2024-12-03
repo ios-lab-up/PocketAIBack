@@ -5,13 +5,15 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-def process_user_message(student_agent: StudentAgent, message: str) -> ChatResponse:
+def process_user_message(student_agent: StudentAgent, message: str, user_id: str, term: str) -> ChatResponse:
     """
     Process a user message by classifying intent and deciding on further action.
 
     Args:
         student_agent (StudentAgent): The initialized StudentAgent instance.
         message (str): The user message to process.
+        user_id (str): The user ID of the student.
+        term (str): The term for context.
 
     Returns:
         ChatResponse: The response to send back to the user.
@@ -24,8 +26,14 @@ def process_user_message(student_agent: StudentAgent, message: str) -> ChatRespo
         # Step 2: Decide next steps based on confidence
         if confidence > 0.8:
             try:
+                # Construct inputs for LangChain agent
+                agent_input = {
+                    "action": intent,
+                    "user_id": user_id,
+                    "term": term,
+                }
                 # Use the LangChain agent to process the query
-                agent_response = student_agent.process_with_agent(message)
+                agent_response = student_agent.process_with_agent(agent_input)
                 return ChatResponse(response=agent_response)
             except RuntimeError as agent_error:
                 logger.error(f"Error processing with agent: {agent_error}")
