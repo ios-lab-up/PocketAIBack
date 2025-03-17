@@ -22,10 +22,10 @@ class StudentAgent:
     data retrieval, and response generation using LangChain.
     """
 
-    def __init__(self, vectorizer_path="app/models/vectorizer.pkl",
-                 classifier_path="app/models/intent_classifier.pkl",
-                 label_encoder_path="app/models/label_encoder.pkl",
-                 llm_model="gpt-3.5-turbo",
+    def __init__(self, vectorizer_path="data/models/vectorizer.pkl",
+                 classifier_path="data/models/intent_classifier.pkl",
+                 label_encoder_path="data/models/label_encoder.pkl",
+                 llm_model="llama3.2:3b",
                  base_url=None, timeout=10):
         """
         Initialize the StudentAgent, including models and LangChain agent setup.
