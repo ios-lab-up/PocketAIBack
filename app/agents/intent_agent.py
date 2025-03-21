@@ -16,9 +16,9 @@ class IntentBasedAgent:
     """
 
     # Model paths and configuration
-    _vectorizer = joblib.load("data/models/vectorizer.pkl")
-    _classifier = joblib.load("data/models/intent_classifier.pkl")
-    _label_encoder = joblib.load("data/models/label_encoder.pkl")
+    _vectorizer = joblib.load("../data/models/vectorizer.pkl")
+    _classifier = joblib.load("../data/models/intent_classifier.pkl")
+    _label_encoder = joblib.load("../data/models/label_encoder.pkl")
     _base_url = settings.API_BASE_URL
     _timeout = 30
     _llm_model = "llama3.2:3b"

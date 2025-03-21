@@ -15,9 +15,9 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 try:
-    vectorizer = joblib.load("data/models/vectorizer.pkl")
-    classifier = joblib.load("data/models/intent_classifier.pkl")
-    label_encoder = joblib.load("data/models/label_encoder.pkl")
+    vectorizer = joblib.load("../data/models/vectorizer.pkl")
+    classifier = joblib.load("../data/models/intent_classifier.pkl")
+    label_encoder = joblib.load("../data/models/label_encoder.pkl")
     logger.info("Model and artifacts loaded successfully.")
 except Exception as e:
     logger.error(f"Error loading model artifacts: {e}")
