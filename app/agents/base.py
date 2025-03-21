@@ -34,6 +34,8 @@ class StudentAgent:
                  base_url=None, timeout=10,
                  llm_api_url=None,
                  llm_api_key=None):
+
+        self.base_url = base_url if base_url else API_BASE_URL
         """
         Initialize the StudentAgent, including models and direct API setup.
 

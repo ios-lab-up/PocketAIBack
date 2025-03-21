@@ -56,33 +56,39 @@ class IntentBasedAgent:
 
     @classmethod
     def make_request(cls, intent: str, user_id: str, term: Optional[str] = None) -> dict:
-        """
-        Perform an HTTP GET request to the `/student-data` endpoint.
-
-        Args:
-            intent (str): The intent derived from the user's query.
-            user_id (str): The user identifier.
-            term (str, optional): Optional term for term-specific actions.
-
-        Returns:
-            dict: The JSON response from the API or an error message.
-        """
         try:
-            # Construir los parámetros de consulta
+            # Build query parameters
             params = {"action": intent, "user_id": user_id}
             if term:
                 params["term"] = term
 
-            # Construir la URL completa con parámetros
+            # Build the complete URL with parameters
             base_url = f"{cls._base_url}/student-data"
             full_url = f"{base_url}?{urllib.parse.urlencode(params)}"
 
-            logger.info(f"Making request to: {full_url}")  # Log con la URL completa
+            logger.info(f"Making request to: {full_url}")
 
             response = requests.get(full_url, timeout=cls._timeout)
+            
+            # Log response details for debugging
+            logger.info(f"Response status code: {response.status_code}")
+            logger.info(f"Response headers: {dict(response.headers)}")
+            content_preview = response.text[:100] if response.text else "EMPTY RESPONSE"
+            logger.info(f"Response content preview: {content_preview}")
+            
             response.raise_for_status()
 
-            return response.json()
+            # Handle empty response
+            if not response.text or not response.text.strip():
+                logger.error("Received empty response from API")
+                return {"error": "Empty response from API"}
+                
+            try:
+                return response.json()
+            except json.JSONDecodeError as e:
+                logger.error(f"JSON parse error: {e}, Raw content: {response.text[:200]}")
+                return {"error": f"Invalid JSON response: {str(e)}"}
+                
         except requests.RequestException as e:
             logger.error(f"Request failed: {e}")
             return {"error": f"Request failed: {str(e)}"}
