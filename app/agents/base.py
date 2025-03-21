@@ -4,8 +4,6 @@ from langchain.agents import Tool  # Tools for creating ReAct agents
 from langchain.prompts import PromptTemplate  # For structured prompt creation
 from app.utils.preprocess import clean_text  # Custom text preprocessing utility
 
-# REMOVED LANGCHAIN LLM IMPORTS
-# ADDED JSON AND REQUESTS IMPORTS FOR DIRECT API CALLS
 import joblib  # For loading saved ML models
 import requests  # For making HTTP requests to the student data API
 import logging  # For application logging
@@ -54,10 +52,9 @@ class StudentAgent:
         self.base_url = base_url
         self.timeout = timeout
         
-        # MODIFIED TO USE API_BASE_URL FROM SETTINGS
         # Fall back to API_BASE_URL if llm_api_url is not provided
         self.llm_api_url = llm_api_url if llm_api_url else f"{API_BASE_URL}/api/chat/completions"
-        self.llm_api_key = llm_api_key if llm_api_key else f"{API_KEY}
+        self.llm_api_key = llm_api_key if llm_api_key else f"{API_KEY}"
         self.llm_headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {llm_api_key}"
@@ -65,7 +62,6 @@ class StudentAgent:
         
         logger.info(f"Initialized with LLM API URL: {self.llm_api_url}")
         
-        # REMOVED LANGCHAIN JSON PARSER
         # Define format instructions manually instead
         self.format_instructions = """
         {
@@ -77,7 +73,6 @@ class StudentAgent:
         # Load ML models for intent classification
         self._load_models(vectorizer_path, classifier_path, label_encoder_path)
 
-        # REMOVED LANGCHAIN AGENT INITIALIZATION
         # Define available tools for use in prompts
         self.tools = self._define_tools()
 
@@ -132,35 +127,38 @@ class StudentAgent:
             logger.error(f"Failed to fetch student data: {e}")
             return {"error": f"Failed to fetch student data: {str(e)}"}
     
-    # REMOVED LANGCHAIN AGENT INITIALIZATION METHOD
-    # ADDED NEW METHOD FOR DIRECT API CALL TO LLM
+    # Direct API call to llm
     def _call_llm_api(self, prompt):
         """
-        Make a direct API call to the LLM service.
-        
-        Args:
-            prompt (str): The prompt to send to the LLM
-            
-        Returns:
-            dict: The LLM response or error information
+        Make a direct API call to the LLM service
         """
         try:
+            # Generate tool names string
+            tool_names = ", ".join([tool.name for tool in self.tools])
+            
+            # Format tools description in the same format that LangChain would use
+            tools_description = self._format_tools_description()
+            
+            # Construct the system prompt using exact same format as the original template
+            system_prompt = (
+                "Eres un asistente útil que siempre responde en JSON. Responde a la siguiente entrada en este formato estricto:\n"
+                f"{self.format_instructions}\n\n"
+                "Herramientas disponibles:\n"
+                f"{tools_description}\n\n"
+                "Nombres de herramientas:\n"
+                f"{tool_names}\n\n"
+                "Acciones realizadas hasta ahora:\n"
+                "[No hay acciones previas]\n\n"
+                "Entrada del usuario:\n"
+                f"{prompt}\n"
+            )
+            
             payload = {
                 "model": self.llm_model,
                 "messages": [
                     {
                         "role": "system",
-                        "content": f"""Eres un asistente útil que siempre responde en JSON. 
-                        Responde a la siguiente entrada en este formato estricto:
-                        {self.format_instructions}
-                        
-                        Herramientas disponibles:
-                        {self._format_tools_description()}
-                        """
-                    },
-                    {
-                        "role": "user",
-                        "content": prompt
+                        "content": system_prompt
                     }
                 ]
             }
@@ -183,12 +181,12 @@ class StudentAgent:
             else:
                 logger.error("Unexpected API response format")
                 return {"error": "Unexpected API response format"}
-                
+            
         except requests.RequestException as e:
             logger.error(f"Error calling LLM API: {e}")
             return {"error": f"Error calling LLM API: {str(e)}"}
     
-    # NEW HELPER METHOD TO FORMAT TOOLS FOR PROMPT
+    # Helper method for formating
     def _format_tools_description(self):
         """
         Format the tools descriptions for inclusion in the system prompt.
@@ -259,16 +257,9 @@ class StudentAgent:
             logger.error(f"Error classifying intent: {e}")
             raise RuntimeError("Failed to classify intent.")
 
-    # COMPLETELY REPLACED THE PROCESS METHOD TO USE DIRECT API CALLS
     def process_with_agent(self, inputs: dict):
         """
-        Process a query by calling the LLM API directly.
-        
-        Args:
-            inputs (dict): Contains the user's input and any additional context
-            
-        Returns:
-            dict: The agent's response or error information
+        Process a query by calling the LLM API directly using the same prompt format.
         """
         try:
             # Extract the user's input from the inputs dictionary
@@ -279,31 +270,19 @@ class StudentAgent:
             intent, confidence = self.classify_intent(user_input)
             logger.info(f"Classified intent: {intent} (confidence: {confidence:.2f})")
             
-            # Enhance the prompt with intent information
-            enhanced_prompt = f"""
-            Usuario pregunta: {user_input}
+            # Create enhanced user input while preserving exact prompt format
+            enhanced_input = f"{user_input}\n\nIntención detectada: {intent} (confianza: {confidence:.2f})"
             
-            Intención detectada: {intent} (confianza: {confidence:.2f})
+            raw_response = self._call_llm_api(enhanced_input)
             
-            Si necesitas datos del estudiante, describe la acción, ID de usuario y término académico necesarios.
-            Responde con una acción clara y una respuesta útil en formato JSON.
-            """
-            
-            # Call the LLM API
-            raw_response = self._call_llm_api(enhanced_prompt)
-            
-            # Try to parse the response as JSON
             try:
-                # If raw_response is already a dict (error case), return it
                 if isinstance(raw_response, dict):
                     return raw_response
                     
-                # Otherwise, try to parse as JSON
                 json_output = json.loads(raw_response)
                 logger.info(f"Parsed JSON output: {json_output}")
                 return json_output
             except json.JSONDecodeError:
-                # If parsing fails, wrap the raw text in our expected format
                 logger.warning("LLM output is not valid JSON, wrapping raw text.")
                 return {
                     "action": "respond",
@@ -311,6 +290,9 @@ class StudentAgent:
                 }
 
         except Exception as e:
-            # Handle any errors in processing
+            logger.error(f"Error processing query: {e}")
+            return {"error": "Lo siento, no pude procesar tu consulta en este momento."}
+
+        except Exception as e:
             logger.error(f"Error processing query: {e}")
             return {"error": "Lo siento, no pude procesar tu consulta en este momento."}
