@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field  # For data validation and schema definiti
 
 API_BASE_URL = settings.API_BASE_URL
 API_KEY = settings.API_KEY
+STUDENT_BASE_URL = settings.STUDENT_BASE_URL
 
 # Configure logger for this module
 logger = logging.getLogger(__name__)
@@ -31,11 +32,10 @@ class StudentAgent:
                  classifier_path="../data/models/intent_classifier.pkl",
                  label_encoder_path="../data/models/label_encoder.pkl",
                  llm_model="llama3.2:3b",
-                 base_url=None, timeout=10,
+                 base_url=STUDENT_BASE_URL, timeout=10,
                  llm_api_url=None,
                  llm_api_key=None):
 
-        self.base_url = base_url if base_url else API_BASE_URL
         """
         Initialize the StudentAgent, including models and direct API setup.
 
