@@ -3,6 +3,7 @@ import requests
 import logging
 import json
 import joblib
+import os
 import urllib.parse
 from app.utils.preprocess import clean_text
 from app.core.settings import settings
@@ -14,13 +15,14 @@ class IntentBasedAgent:
     performs an HTTP request, and generates a response using direct API calls.
     """
     # Model paths and configuration
-    _vectorizer = joblib.load("../data/models/vectorizer.pkl")
-    _classifier = joblib.load("../data/models/intent_classifier.pkl")
-    _label_encoder = joblib.load("../data/models/label_encoder.pkl")
+
+    _vectorizer = joblib.load("/app/data/models/vectorizer.pkl")
+    _classifier = joblib.load("/app/data/models/intent_classifier.pkl")
+    _label_encoder = joblib.load("/app/data/models/label_encoder.pkl")
     _base_url = settings.API_BASE_URL
     _timeout = 30
     _llm_model = "llama3.2:3b"
-    _llm_api_url = f"{settings.API_BASE_URL}/api/chat/completions"
+    _llm_api_url = f"{settings.API_BASE_URL}"
     _llm_api_key = settings.API_KEY
     _llm_headers = {
         "Content-Type": "application/json",
@@ -43,6 +45,10 @@ class IntentBasedAgent:
             predicted_intent = cls._label_encoder.inverse_transform([predicted_label])[0]
             probabilities = cls._classifier.predict_proba(query_vectorized)[0]
             confidence = max(probabilities)
+
+            # TODO: Clasiffier no coincide con categorias de condor. Ejemplo: general es info en condor
+            if predicted_intent == 'general':
+                predicted_intent = 'info'
             logger.info(f"Predicted intent: {predicted_intent}, confidence: {confidence}")
             return predicted_intent, confidence
         except Exception as e:
@@ -57,8 +63,8 @@ class IntentBasedAgent:
             if term:
                 params["term"] = term
             # Build the complete URL with parameters
-            base_url = f"{cls._base_url}/api/chat/completions/student-data"
-            full_url = f"{base_url}?{urllib.parse.urlencode(params)}"
+            base_url = settings.STUDENT_BASE_URL
+            full_url = f"{base_url}/api/v2/students/student-data?{urllib.parse.urlencode(params)}"
             logger.info(f"Making request to: {full_url}")
             response = requests.get(full_url, timeout=cls._timeout)
             
@@ -78,73 +84,9 @@ class IntentBasedAgent:
                 return response.json()
             except json.JSONDecodeError as e:
                 logger.error(f"JSON parse error: {e}, Raw content: {response.text[:200]}")
-                # Instead of returning an error, fall back to direct LLM query
-                return cls.direct_llm_query(intent, user_id, term)
                 
         except requests.RequestException as e:
             logger.error(f"Request failed: {e}")
-            # Fall back to direct LLM query on request failure
-            return cls.direct_llm_query(intent, user_id, term)
-            
-    @classmethod
-    def direct_llm_query(cls, intent: str, user_id: str, term: Optional[str] = None) -> dict:
-        """
-        Fall back to a direct query to the LLM when student data API fails.
-        """
-        try:
-            logger.info(f"Falling back to direct LLM query for intent: {intent}")
-            
-            # Build a prompt based on the intent and user data
-            context = f"Intent: {intent}, User ID: {user_id}"
-            if term:
-                context += f", Term: {term}"
-            
-            # Create the payload for the API call
-            payload = {
-                "model": cls._llm_model,
-                "messages": [
-                    {
-                        "role": "system",
-                        "content": (
-                            "Eres un asistente útil para estudiantes universitarios. "
-                            "Responde preguntas sobre la Universidad Panamericana en español. "
-                            f"Contexto: {context}"
-                        )
-                    },
-                    {
-                        "role": "user",
-                        "content": f"Consulta relacionada con {intent}"
-                    }
-                ]
-            }
-            
-            # Make direct API call to LLM - FIXED URL HERE
-            llm_url = f"{cls._base_url}/api/chat/completions"  # Fixed URL to avoid duplication
-            logger.info(f"Making direct LLM request to: {llm_url}")
-            
-            response = requests.post(
-                llm_url,
-                headers=cls._llm_headers,
-                json=payload,
-                timeout=cls._timeout
-            )
-            
-            response.raise_for_status()
-            result = response.json()
-            
-            # Extract content from LLM response
-            if "choices" in result and len(result["choices"]) > 0:
-                content = result["choices"][0]["message"]["content"]
-                logger.info(f"Direct LLM response received, length: {len(content)}")
-                # Return as a special format that generate_response can recognize
-                return {"direct_llm_response": content}
-            else:
-                logger.error("Unexpected LLM API response format")
-                return {"error": "Unexpected response format from LLM API"}
-                
-        except Exception as e:
-            logger.error(f"Failed in direct LLM query: {e}")
-            return {"error": f"Failed to generate response: {str(e)}"}
 
     @classmethod
     def generate_response(cls, user_query: str, api_data: dict) -> str:
@@ -164,6 +106,7 @@ class IntentBasedAgent:
             # If there's an error and no direct response, try one more direct query
             if "error" in api_data and not api_data.get("direct_llm_response"):
                 # Make a direct query with the original user query
+
                 payload = {
                     "model": cls._llm_model,
                     "messages": [
@@ -173,10 +116,11 @@ class IntentBasedAgent:
                         }
                     ]
                 }
+
+                logger.info(f"Payload for LLM: {payload}")
                 
-                # Use the correct LLM API URL here too
                 response = requests.post(
-                    cls._llm_api_url,  # This should already be correct
+                    cls._llm_api_url,
                     headers=cls._llm_headers,
                     json=payload,
                     timeout=cls._timeout
@@ -190,6 +134,7 @@ class IntentBasedAgent:
                 else:
                     return f"Lo siento, no pude obtener información sobre tu consulta: {api_data.get('error', 'Error desconocido')}"
             
+
             # Create the prompt for the model with API data
             prompt = (
                 "Eres un asistente que responde en español basado en datos de una API.\n"
@@ -197,19 +142,20 @@ class IntentBasedAgent:
                 f"Datos de la API:\n{json.dumps(api_data, indent=2)}\n\n"
                 "Genera una respuesta clara y útil para el usuario basada en estos datos."
             )
-            
+        
             logger.info(f"Prompt for LLM: {prompt}")
+
             # Prepare the payload for the API call
             payload = {
                 "model": cls._llm_model,
                 "messages": [
                     {
-                        "role": "system",
+                        "role": "user",
                         "content": prompt
                     }
                 ]
             }
-            
+
             # Make the API call
             response = requests.post(
                 cls._llm_api_url,

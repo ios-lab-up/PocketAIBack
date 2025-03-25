@@ -28,9 +28,9 @@ class StudentAgent:
     data retrieval, and response generation using direct API calls.
     """
 
-    def __init__(self, vectorizer_path="../data/models/vectorizer.pkl",
-                 classifier_path="../data/models/intent_classifier.pkl",
-                 label_encoder_path="../data/models/label_encoder.pkl",
+    def __init__(self, vectorizer_path="/app/data/models/vectorizer.pkl",
+                 classifier_path="/app/data/models/intent_classifier.pkl",
+                 label_encoder_path="/app/data/models/label_encoder.pkl",
                  llm_model="llama3.2:3b",
                  base_url=STUDENT_BASE_URL, timeout=10,
                  llm_api_url=None,
@@ -55,7 +55,7 @@ class StudentAgent:
         self.timeout = timeout
         
         # Fall back to API_BASE_URL if llm_api_url is not provided
-        self.llm_api_url = llm_api_url if llm_api_url else f"{API_BASE_URL}/api/chat/completions"
+        self.llm_api_url = llm_api_url if llm_api_url else f"{API_BASE_URL}"
         self.llm_api_key = llm_api_key if llm_api_key else f"{API_KEY}"
         self.llm_headers = {
             "Content-Type": "application/json",

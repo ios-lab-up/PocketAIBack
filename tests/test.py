@@ -2,6 +2,7 @@ import sys
 import os
 # Add the project root to the Python path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from app.core.settings import settings
 
 import requests
 from app.agents.intent_agent import IntentBasedAgent
@@ -10,9 +11,9 @@ from app.agents.intent_agent import IntentBasedAgent
 BASE_URL = "http://127.0.0.1:8000/api/v1"
 
 # Update the base URL in the IntentBasedAgent class to match the test environment
-IntentBasedAgent._base_url = BASE_URL
+IntentBasedAgent._base_url = settings.API_BASE_URL
 # Also update the LLM API URL
-IntentBasedAgent._llm_api_url = f"{BASE_URL}/api/chat/completions"
+IntentBasedAgent._llm_api_url = f"{settings.API_BASE_URL}"
 
 # Health check test
 try:
@@ -23,12 +24,13 @@ except Exception as e:
 
 # Chat test
 try:
-    chat_data = {"message": "Hello, how are you?"}
-    chat_response = requests.post(f"{BASE_URL}/chat?user_id=12345&term=test", json=chat_data)
+    chat_data = {"message": "Cual es mi calificacion mas alta?"}
+    chat_response = requests.post(f"{BASE_URL}/chat?user_id=0260694&term=1252", json=chat_data)
     print("Chat Response:", chat_response.json())
 except Exception as e:
     print(f"Chat test failed: {e}")
 
+"""
 # Handle a user query using IntentBasedAgent
 try:
     response = IntentBasedAgent.handle_query(
@@ -38,4 +40,6 @@ try:
     )
     print("Agent Response:", response)
 except Exception as e:
-    print(f"Agent test failed: {str(e)}")
+    print(f"Agent test failed: {str(e)}")"
+    ""
+    """
