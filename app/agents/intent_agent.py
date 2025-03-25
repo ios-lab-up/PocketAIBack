@@ -21,7 +21,7 @@ class IntentBasedAgent:
     _label_encoder = joblib.load("/app/data/models/label_encoder.pkl")
     _base_url = settings.API_BASE_URL
     _timeout = 30
-    _llm_model = "llama3.2:3b"
+    _llm_model = settings.LLM_MODEL
     _llm_api_url = f"{settings.API_BASE_URL}"
     _llm_api_key = settings.API_KEY
     _llm_headers = {

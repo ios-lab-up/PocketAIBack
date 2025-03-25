@@ -1,14 +1,13 @@
 import sys
 import os
-# Add the project root to the Python path
+import requests
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app.core.settings import settings
-
-import requests
 from app.agents.intent_agent import IntentBasedAgent
 
 # Base URL for API endpoints
-BASE_URL = "http://127.0.0.1:8000/api/v1"
+BASE_URL = settings.LOCAL_URL
 
 # Update the base URL in the IntentBasedAgent class to match the test environment
 IntentBasedAgent._base_url = settings.API_BASE_URL

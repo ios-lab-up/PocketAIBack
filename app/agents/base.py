@@ -31,7 +31,7 @@ class StudentAgent:
     def __init__(self, vectorizer_path="/app/data/models/vectorizer.pkl",
                  classifier_path="/app/data/models/intent_classifier.pkl",
                  label_encoder_path="/app/data/models/label_encoder.pkl",
-                 llm_model="llama3.2:3b",
+                 llm_model=settings.LLM_MODEL,
                  base_url=STUDENT_BASE_URL, timeout=10,
                  llm_api_url=None,
                  llm_api_key=None):
@@ -43,7 +43,7 @@ class StudentAgent:
             vectorizer_path (str): Path to the vectorizer pickle file.
             classifier_path (str): Path to the classifier pickle file.
             label_encoder_path (str): Path to the label encoder pickle file.
-            llm_model (str): Language model to use (default: "llama3.2:3b").
+            llm_model (str): Language model to use
             base_url (str): Base URL for the student data API.
             timeout (int): Timeout for the student data API requests.
             llm_api_url (str): URL for the LLM API endpoint. Falls back to API_BASE_URL if None.
