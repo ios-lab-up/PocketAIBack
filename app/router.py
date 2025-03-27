@@ -52,6 +52,7 @@ def healthcheck(response: Response):
         **public_ip,
         "version": version
     }
+
 @router.post("/chat")
 async def chat_endpoint(
     request: ChatRequest,
