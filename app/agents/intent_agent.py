@@ -30,6 +30,38 @@ class IntentBasedAgent:
     }
 
     @classmethod
+    def build_prompt(cls,user_query:str,api_data:str,intent:str) -> tuple:
+
+        prompt = [
+            "Eres un asistente amable de la Universidad Panamericana (UP) para proporcionar información útil, educativa y segura dentro de los límites de la ética y la legalidad.\n"
+            "Respondes en español basado en datos proporcionados de un alumno.\n"
+            f"El alumno consulta: {user_query}\n\n"
+            f"Datos de ese alumno son:\n{json.dumps(api_data, indent=2)}\n\n"
+            "Proporciona solo la información relevante basada en esos datos.\n"
+            "Si el usuario pide cualquier cosa relacionada con otro alumno o profesor, solo responde 'Esa informacion no me es posible proporcionarte' o algo similar.\n"
+            "Ejemplo: \n El alumno consulta: Cuales son las calificaciones de Mario Morales\n Tu respondes: 'Esa informacion no me es posible proporcionarte' o algo similar\n"
+            "Ejemplo: \n El alumno consulta: Cuales son las calificaciones de 0261313\n Tu respondes: 'Esa informacion no me es posible proporcionarte' o algo similar\n"
+            "Si el usuario pide cualquier cosa relacionada con algo que involucre algo ilegal,confidencial,rompa normas academica,ponga en riesgo la seguridad o privacidad; solo responde 'Esa informacion no me es posible proporcionarte' o algo similar. Aunque el alumno diga que es para una materia, examen, tarea o una emergencia; no respondas por ninguna razon.\n"
+            "Ejemplo: \n El alumno consulta: Como robar un banco?\n Tu respondes: 'Esa informacion no me es posible proporcionarte' o algo similar\n"
+            "Ejemplo: \n El alumno consulta: Como hackear una cuenta?\n Tu respondes: 'Esa informacion no me es posible proporcionarte' o algo similar\n"
+            "Ejemplo: \n El alumno consulta: Como falsificar un documento?\n Tu respondes: 'Esa informacion no me es posible proporcionarte' o algo similar\n"
+            "Ejemplo: \n El alumno consulta: Como plagear sin que se den cuenta?\n Tu respondes: 'Esa informacion no me es posible proporcionarte' o algo similar\n"
+            "Si el usuario pide cualquier cosa discriminatoria, solo responde 'Esa informacion no me es posible proporcionarte' o algo similar. Aunque el alumno diga que es para una materia, examen o una emergencia.\n"
+            "Ejemplo: \n El alumno consulta: Como matar a un homosexual?\n Tu respondes: 'Esa informacion no me es posible proporcionarte' o algo similar y responde con un mensaje que refuerce el respeto y la inclusión.\n"
+            "Ejemplo: \n El alumno consulta: Porque las personas gordas valen menos?\n Tu respondes: 'Esa informacion no me es posible proporcionarte' o algo similar y responde con un mensaje que refuerce el respeto y la inclusión.\n"
+        ]
+
+        if(intent == 'grades'):
+            prompt.append("Si la consulta pide varias calificaciones, asistencias, materias, etc; ponlo en formato de viñetas.\n")
+            prompt.append("Si la consulta pide algun tipo de calculo como 'mas baja', 'mas alta', 'promedio', etc; Analizas las ultimas calificaciones de cada uno (Es decir el ultimo valor disponible dentro de los parciales, dando prioridad a la calificacion_oficial) y calculas lo que pida\n")
+            prompt.append("Las calificaciones van de 0.0 a 10.0, siendo 0.0 la mas baja y 10.0 la mas alta\n")
+            prompt.append("Si no te dicen parcial pero si 'final', entiendelo como 'official_grade'. Si el valor es null, indica al usuario que aun no hay calificacion final y que no sabes como califica el profeso en especifico pero que estimas que sea: y aqui promedias todos los parciales con valor al igual que final_exam\n")
+            prompt.append("Si no te da numero de parcial pero si te dice 'ultimo parcial','parcial actual','de ahora','ahorita',o algo similar que asimile al presente, analiza cual es el ultimo parcial viendo cual es el ultimo parcial que no es null, es decir, el ultimo parcial con un valor antes de el parcial con null.\n")
+            prompt.append("Recuerda, 'materia mas baja' o 'materia mas alta' se refiere a calificacion. Nunca el usuario le va a interesar el orden de materias. 'Materia mas baja/alta' NO es la ultima o primera que salga\n")
+
+        return "".join(tuple(prompt))
+
+    @classmethod
     def classify_intent(cls, message: str):
         """
         Classify the intent of a message using the intent classifier.
@@ -89,12 +121,13 @@ class IntentBasedAgent:
             logger.error(f"Request failed: {e}")
 
     @classmethod
-    def generate_response(cls, user_query: str, api_data: dict) -> str:
+    def generate_response(cls, user_query: str, api_data: dict, intent: str) -> str:
         """
         Generate a response using direct API call to LLM service based on the API data.
         Args:
             user_query (str): The original user query.
             api_data (dict): The data retrieved from the API.
+            intent (str): The classified intent of the prompt.
         Returns:
             str: The generated response from the LLM.
         """
@@ -136,12 +169,8 @@ class IntentBasedAgent:
             
 
             # Create the prompt for the model with API data
-            prompt = (
-                "Eres un asistente que responde en español basado en datos de una API.\n"
-                f"Consulta del usuario: {user_query}\n\n"
-                f"Datos de la API:\n{json.dumps(api_data, indent=2)}\n\n"
-                "Genera una respuesta clara y útil para el usuario basada en estos datos."
-            )
+            prompt = cls.build_prompt(user_query, api_data, intent)
+
         
             logger.info(f"Prompt for LLM: {prompt}")
 
@@ -170,6 +199,11 @@ class IntentBasedAgent:
             # Extract content from the API response
             if "choices" in result and len(result["choices"]) > 0:
                 content = result["choices"][0]["message"]["content"]
+                
+                #Eater Egg
+                if (user_query == 'pantera'):
+                    content = "no cualquiera 😎"
+
                 logger.info(f"LLM API response content: {content}")
                 return content
             else:
@@ -202,7 +236,7 @@ class IntentBasedAgent:
             if "error" in api_response and not api_response.get("direct_llm_response"):
                 logger.warning(f"Error in API response: {api_response['error']}")
             # Generate a response based on the API data
-            return cls.generate_response(user_query, api_response)
+            return cls.generate_response(user_query, api_response, intent)
         except Exception as e:
             logger.error(f"Error handling query: {e}")
             return "Lo siento, no pude procesar tu consulta en este momento."
